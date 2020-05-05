@@ -1,0 +1,172 @@
+---
+version: '3.7'
+
+services:
+  server:
+    container_name: mail-server
+    image: hardware/mailserver:1.1-latest
+    domainname: ${DOMAIN}              
+    hostname: mail
+    restart: always
+    ports:
+      - "25:25"      
+      - "143:143"    
+      - "465:465"   
+      - "587:587"    
+      - "993:993"    
+      - "4190:4190"  
+    environment:
+      - DBHOST=mysql
+      - DBPASS=${DB_USER_PASS}                    
+      - REDIS_HOST= redis
+      - RSPAMD_PASSWORD=${RSPAM_PASS}       
+      - ADD_DOMAINS=${MAIL_DOMAINS}
+      - DISABLE_DNS_RESOLVER=true
+      - ENABLE_FETCHMAIL=true
+      - RELAY_NETWORKS=${RELAY_NETWORKS}
+    volumes:
+      - server:/var/mail:Z
+      - traefik_acme:/etc/letsencrypt/acme
+    depends_on:
+      - mysql
+      - redis
+    networks:
+      - net
+      - traefik
+    ulimits:
+      nproc: 65535
+      nofile:
+        soft: 20000
+        hard: 40000
+    healthcheck:
+      test: postfix status || exit 1
+    deploy:
+      resources:
+        limits:
+          cpus: '0.2'
+          memory: '1g'
+    labels:
+      - "traefik.backend=mail-spam"
+      - "traefik.frontend.rule=Host:${SPAM_URL}"
+      - "traefik.docker.network=traefik"
+      - "traefik.port=11334"
+      - "docker.group=mail-server"
+
+  postfixadmin:
+    container_name: mail-postfixadmin
+    image: hardware/postfixadmin
+    domainname: ${DOMAIN}
+    hostname: mail
+    restart: always
+    environment:
+      - DBPASS=${DB_USER_PASS}
+    depends_on:
+      - server
+      - mysql
+    networks:
+      - net
+      - traefik
+    links:
+      - mysql:mariadb
+      - server:mailserver
+   # healthcheck:
+   #   test: curl --fail http://localhost:8888/ || exit 1
+    deploy:
+      resources:
+        limits:
+          cpus: '0.1'
+          memory: '50m'
+    labels:
+      - "traefik.backend=mail-postfix"
+      - "traefik.frontend.rule=Host:${POSTFIX_URL}"
+      - "traefik.docker.network=traefik"
+      - "traefik.port=8888"
+      - "docker.group=mail-server"
+
+  rainloop:
+    container_name: mail-rainloop
+    image: hardware/rainloop
+    restart: always
+    volumes:
+      - rainloop:/rainloop/data:Z
+    depends_on:
+      - server
+      - mysql
+    networks:
+      - net
+      - traefik  
+    links:
+      - mysql:mariadb
+      - server:mailserver
+   # healthcheck:
+   #   test: curl --fail http://localhost:8888/ || exit 1
+    deploy:
+      resources:
+        limits:
+          cpus: '0.1'
+          memory: '50m'
+    labels:
+      - "traefik.backend=mail-webmail"
+      - "traefik.frontend.rule=Host:${RAINLOOP_URL}"
+      - "traefik.docker.network=traefik"
+      - "traefik.port=8888"  
+      - "docker.group=mail-server"
+
+  mysql:
+    container_name: mail-db
+    image: mariadb:10.3
+    restart: always
+    environment:
+      - MYSQL_ROOT_PASSWORD=${DB_ROOT_PASS}
+      - MYSQL_DATABASE=${DB_NAME}
+      - MYSQL_USER=${DB_USER}
+      - MYSQL_PASSWORD=${DB_USER_PASS}
+    volumes:
+      - db:/var/lib/mysql:Z
+    networks:
+      - net
+    healthcheck:       
+      test: mysqladmin ping -h localhost -p$$MYSQL_ROOT_PASSWORD && test '0' -eq $$(ps aux | awk '{print $$11}' | grep -c -e '^mysql$$')
+    deploy:
+      resources:
+        limits:
+          cpus: '0.1'
+          memory: '100m'
+    labels:
+      - "traefik.enable=false"
+      - "docker.group=mail-server"
+
+  redis:
+    container_name: mail-redis
+    image: redis:alpine
+    restart: always
+    command: redis-server --appendonly yes
+    volumes:
+      - redis:/data:Z
+    networks:
+      - net
+    healthcheck:
+      test: pidof redis-server
+    deploy:
+      resources:
+        limits:
+          cpus: '0.1'
+          memory: '50m'
+    labels:
+      - "traefik.enable=false"
+      - "docker.group=mail-server"
+
+volumes:
+  redis:
+  db:
+  rainloop:
+  server:
+  traefik_acme:
+    external: true
+
+networks:
+  net:
+  traefik:
+    external:
+      name: traefik
+
