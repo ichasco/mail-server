@@ -46,9 +46,9 @@ services:
           cpus: '0.2'
           memory: '1g'
     labels:
+      - "traefik.enable=true"
       - "traefik.backend=mail-spam"
       - "traefik.frontend.rule=Host:${SPAM_URL}"
-      - "traefik.docker.network=traefik"
       - "traefik.port=11334"
       - "docker.group=mail-server"
 
@@ -77,9 +77,9 @@ services:
           cpus: '0.1'
           memory: '50m'
     labels:
+      - "traefik.enable=true"
       - "traefik.backend=mail-postfix"
       - "traefik.frontend.rule=Host:${POSTFIX_URL}"
-      - "traefik.docker.network=traefik"
       - "traefik.port=8888"
       - "docker.group=mail-server"
 
@@ -106,9 +106,9 @@ services:
           cpus: '0.1'
           memory: '50m'
     labels:
+      - "traefik.enable=true"
       - "traefik.backend=mail-webmail"
       - "traefik.frontend.rule=Host:${RAINLOOP_URL}"
-      - "traefik.docker.network=traefik"
       - "traefik.port=8888"  
       - "docker.group=mail-server"
 
@@ -133,7 +133,6 @@ services:
           cpus: '0.1'
           memory: '100m'
     labels:
-      - "traefik.enable=false"
       - "docker.group=mail-server"
 
   redis:
@@ -153,7 +152,6 @@ services:
           cpus: '0.1'
           memory: '50m'
     labels:
-      - "traefik.enable=false"
       - "docker.group=mail-server"
 
 volumes:
